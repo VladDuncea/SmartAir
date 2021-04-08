@@ -3,9 +3,14 @@
    Smart AC
    using Rares Cristea's example, 12.03.2021
    using Mathieu Stefani's example, 07 février 2016
+
+   Pentru BUILD g++ smart_air.cpp -o smartair -lpistache -lpthread
+   Rulare: ./smartair
 */
 
 #include <algorithm>
+#include <fstream>
+#include <vector>
 
 #include <pistache/net.h>
 #include <pistache/http.h>
@@ -17,6 +22,12 @@
 #include <pistache/common.h>
 
 #include <signal.h>
+
+// Pentru usurinta JSON
+#include <nlohmann/json.hpp>
+
+// for convenience
+using json = nlohmann::json;
 
 using namespace std;
 using namespace Pistache;
@@ -42,6 +53,69 @@ namespace Generic {
     }
 
 }
+
+
+///////////////////////////
+// Tipuri necesare  // TODO ar trebui mutate in un fisier separat pentru tipuri
+// Bool settings
+struct boolSetting{
+    std::string name;
+    bool value;
+};
+
+// Int settings
+struct intSetting{
+    std::string name;
+    int value;
+};
+
+// Custom settings
+enum acMode{
+    autoo,
+    cool,
+    dry,
+    heat,
+    fan
+};
+struct modeStruct{
+    std::string name;
+    acMode value;
+};
+enum fanSpeedEnum{
+    autoFan,
+    low,
+    medium,
+    high
+};
+struct FanSpeedStruct{
+    std::string name;
+    fanSpeedEnum value;
+};
+
+struct ProgrameMemorie{
+    bool economy, working, swing, timer;
+    int temperature;
+    acMode mode;
+    fanSpeedEnum fanSpeed; 
+};
+
+// Parsare JSON -> programMemorie si invers
+void to_json(json& j, const ProgrameMemorie& p) {
+    j = json{{"economy", p.economy}, {"working", p.working}, {"swing", p.swing}, 
+                {"timer", p.timer},{"temperature", p.temperature},{"mode", p.mode},{"fanSpeed", p.fanSpeed}};
+}
+void from_json(const json& j, ProgrameMemorie& p) {
+    j.at("economy").get_to(p.economy);
+    j.at("working").get_to(p.working);
+    j.at("swing").get_to(p.swing);
+    j.at("timer").get_to(p.timer);
+    j.at("temperature").get_to(p.temperature);
+    j.at("mode").get_to(p.mode);
+    j.at("fanSpeed").get_to(p.fanSpeed);
+}
+
+// END TIPURI
+/////////////////
 
 // Definition of the MicrowaveEnpoint class 
 class SmartAirEndpoint {
@@ -79,6 +153,12 @@ private:
         Routes::Get(router, "/auth", Routes::bind(&SmartAirEndpoint::doAuth, this));
         Routes::Post(router, "/settings/:settingName/:value", Routes::bind(&SmartAirEndpoint::setSetting, this));
         Routes::Get(router, "/settings/:settingName/", Routes::bind(&SmartAirEndpoint::getSetting, this));
+        Routes::Get(router, "/settings/getAll/", Routes::bind(&SmartAirEndpoint::getRunningConfig, this));
+
+        // Rute pentru programe
+        Routes::Post(router, "/programe/alege/:value", Routes::bind(&SmartAirEndpoint::setProgram, this));
+        Routes::Get(router, "/programe/memorie", Routes::bind(&SmartAirEndpoint::getProgram, this));
+        // TODO Routes::Post(router, "/programe/add", Routes::bind(&SmartAirEndpoint::addProgram, this));
     }
 
     
@@ -91,6 +171,9 @@ private:
         // Send the response
         response.send(Http::Code::Ok);
     }
+
+    /////////////////////
+    // SETARI
 
     // Endpoint to configure one of the AC's settings.
     void setSetting(const Rest::Request& request, Http::ResponseWriter response){
@@ -144,67 +227,168 @@ private:
         }
     }
 
+    void getRunningConfig(const Rest::Request& request, Http::ResponseWriter response){
+        Guard guard(smartAirLock);
+
+        string stringJSON = smartAir.getRunngingConfig();
+
+        if (stringJSON != "") {
+
+            // In this response I also add a couple of headers, describing the server that sent this response, and the way the content is formatted.
+            using namespace Http;
+            response.headers()
+                        .add<Header::Server>("pistache/0.1")
+                        .add<Header::ContentType>(MIME(Text, Plain));
+
+            response.send(Http::Code::Ok, stringJSON);
+        }
+        else {
+            response.send(Http::Code::Not_Found, "A aparut o eroare\n");
+        }
+    }
+
+    // END SETARI
+    //////////////////////////
+
+    //////////////////////////
+    // PROGRAME
+
+    // Setting to get the settings value of one of the configurations of the Microwave
+    void getProgram(const Rest::Request& request, Http::ResponseWriter response){
+        Guard guard(smartAirLock);
+
+        string stringJSON = smartAir.programeToJSON();
+
+        if (stringJSON != "") {
+
+            // In this response I also add a couple of headers, describing the server that sent this response, and the way the content is formatted.
+            using namespace Http;
+            response.headers()
+                        .add<Header::Server>("pistache/0.1")
+                        .add<Header::ContentType>(MIME(Text, Plain));
+
+            response.send(Http::Code::Ok, stringJSON);
+        }
+        else {
+            response.send(Http::Code::Not_Found, "A aparut o eroare\n");
+        }
+    }
+
+    // Endpoint to load the settings from a given preset
+    void setProgram(const Rest::Request& request, Http::ResponseWriter response){
+        // You don't know what the parameter content that you receive is, but you should
+        // try to cast it to some data structure. Here, I cast the settingName to string.
+        int nrProgram = request.param(":value").as<std::int16_t>();
+
+        // This is a guard that prevents editing the same value by two concurent threads. 
+        Guard guard(smartAirLock);
+
+        // Setting the microwave's setting to value
+        int setResponse = smartAir.aplicaProgram(nrProgram);
+
+        // Sending some confirmation or error response.
+        if (setResponse == 1) {
+            response.send(Http::Code::Ok, "Settings were loaded from the preset nr " + to_string(nrProgram));
+        }
+        else {
+            response.send(Http::Code::Not_Found,"The program with number " + to_string(nrProgram) + " was not found");
+        }
+    }
+
+    // END PROGRAME
+    ///////////////////////
+
     // Defining the class of the AC. It should model the entire configuration of the AC
     class SmartAir {
     private:
         // Bool settings
-        struct boolSetting{
-            std::string name;
-            bool value;
-        }economy,working,swing,timer;
-
+        boolSetting economy,working,swing,timer;
         // Int settings
-        struct intSetting{
-            std::string name;
-            int value;
-        }temperature;
+        intSetting temperature;
+        modeStruct mode;
+        FanSpeedStruct fanSpeed;
 
-        // Custom settings
-        enum acMode{
-            autoo,
-            cool,
-            dry,
-            heat,
-            fan
-        };
-        struct{
-            std::string name;
-            acMode value;
-        }mode;
-        enum fanSpeedEnum{
-            autoFan,
-            low,
-            medium,
-            high
-        };
-        struct{
-            std::string name;
-            fanSpeedEnum value;
-        }fanSpeed;
-
+        vector<ProgrameMemorie> programeMemorie;
+        // Cale fisier programe
+        const string locatiePrograme = "programe.txt";
 
     public:
         explicit SmartAir()
         {
-            // Initializare variabile 
+            // Initializare variabile (numele lor)
             // TODO: implementeaza memoria pentru a pastra ultimele setari
-            economy.name = "economy";
-            economy.value = false;
-            working.name = "onoff";
-            working.value = false;
-            swing.name = "swing";
-            swing.value = false;
-            timer.name = "timer";
-            timer.value = false;
+            economy.name    = "economy";
+            working.name    = "onoff";
+            swing.name      = "swing";
+            timer.name      = "timer";
 
             temperature.name = "temperature";
-            temperature.value = 25;
 
             mode.name = "mode";
-            mode.value = acMode::autoo;
             fanSpeed.name = "fanSpeed";
-            fanSpeed.value = fanSpeedEnum::autoFan;
+
+            // Citire programe
+            citestePrograme();
+
+            // Seteaza variabilele la programul default
+            // TODO (de pus ultimul program)
+            aplicaProgram(0);
         }
+
+        ///////////////////////////
+        // Functii pentru programe
+
+        void citestePrograme()
+        {
+            ifstream fin(locatiePrograme);
+            // Citim numarul de programe existente
+            int nrPrograme;
+            fin >>  nrPrograme;
+            for(int i=0;i < nrPrograme;i++)
+            {
+                // Citim pe rand datele necesare
+                ProgrameMemorie p;
+                int mode, fan;
+                fin >> p.economy >> p.working >> p.swing >> p.timer;
+                fin >> p.temperature >> mode >> fan;
+                p.mode = (acMode) mode;
+                p.fanSpeed = (fanSpeedEnum) fan;
+
+                programeMemorie.push_back(p);
+            }
+        }
+
+        int aplicaProgram(int nrProgram)
+        {
+            // Intoarce: -1 daca programul nu exista, 1 daca totul e ok
+            if(nrProgram >= programeMemorie.size())
+            {
+                return -1;
+            }
+
+            ProgrameMemorie &p = programeMemorie[nrProgram];
+            economy.value       = p.economy;
+            working.value       = p.working;
+            swing.value         = p.swing;
+            timer.value         = p.timer;
+            temperature.value   = p.temperature;
+            mode.value          = p.mode;
+            fanSpeed.value      = p.fanSpeed;
+
+            return 1;
+        }
+
+        string programeToJSON()
+        {
+            // Pentru ca am scris functia to_json se va face conversia automat!, 
+            // Functia to_json trebuie sa fie vizibila(publica)
+            json j(programeMemorie);
+
+            return j.dump();
+        }
+        
+        // END Functii pentru programe
+        ///////////////////////////
 
         // Setting the value for one of the settings. Hardcoded for the defrosting option
         int set(std::string name, std::string value){
@@ -391,6 +575,21 @@ private:
             }
 
             return "";
+        }
+    
+        string getRunngingConfig()
+        {
+            json j;
+            j["economy"]        = economy.value;
+            j["working"]        = working.value;
+            j["swing"]          = swing.value;
+            j["timer"]          = timer.value;
+            j["temperature"]    = temperature.value;
+            j["mode"]           = mode.value;
+            j["fanSpeed"]       = fanSpeed.value;
+            j["timer"]          = timer.value;
+
+            return j.dump();
         }
     };
 
