@@ -137,14 +137,24 @@ public:
     void start() {
         httpEndpoint->setHandler(router.handler());
         httpEndpoint->serveThreaded();
+
+        // Construim un thread care va rula functia de update
+        // Foarte important ref(smartAir) -> trimite smartAir ca referinta, nu face copie
+        updateLoopThread = new thread(&SmartAir::UpdateLoop, ref(smartAir));
     }
 
     // When signaled server shuts down
     void stop(){
         httpEndpoint->shutdown();
+
+        // Semnalare oprire thread
+        smartAir.runThread = false;
+        // Asteptare oprire thread
+        updateLoopThread->join();
     }
 
 private:
+    thread *updateLoopThread;
     void setupRoutes() {
         using namespace Rest;
         // Defining various endpoints
@@ -313,6 +323,10 @@ private:
         const string locatiePrograme = "programe.txt";
 
     public:
+
+        // Pentru thread
+        bool runThread = true;
+
         explicit SmartAir()
         {
             // Initializare variabile (numele lor)
@@ -591,6 +605,19 @@ private:
 
             return j.dump();
         }
+
+        void UpdateLoop()
+        {
+            while(runThread)
+            {
+                // Rulam functia de update la aproximativ o secunda
+                this_thread::sleep_for (chrono::seconds(1));
+
+                // TODO aici vor veni toate interactiunile periodice
+            }
+
+            cout << "Am oprit threadul de update!";
+        }
     };
 
     // Create the lock which prevents concurrent editing of the same variable
@@ -620,7 +647,7 @@ int main(int argc, char *argv[]) {
     }
 
     // Set a port on which your server to communicate
-    Port port(9080);
+    Port port(9081);
 
     // Number of threads used by the server
     int thr = 2;
