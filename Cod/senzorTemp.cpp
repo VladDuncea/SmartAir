@@ -51,12 +51,12 @@ int main(int argc, char *argv[])
         {
             cout<<"Eroare"<<endl;
             return -1;
-        } 
+        }
 
-        
+
         // Pauza 1 sec
         sleep(1);
         i++;
     }
-    
+
 }
