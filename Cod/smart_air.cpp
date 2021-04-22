@@ -99,11 +99,17 @@ struct ProgrameMemorie{
     fanSpeedEnum fanSpeed; 
 };
 
+struct Rezervor{
+    int quantity;
+    int numberOfMonths;
+};
+
 // Parsare JSON -> programMemorie si invers
 void to_json(json& j, const ProgrameMemorie& p) {
     j = json{{"economy", p.economy}, {"working", p.working}, {"swing", p.swing}, 
                 {"timer", p.timer},{"temperature", p.temperature},{"mode", p.mode},{"fanSpeed", p.fanSpeed}};
 }
+
 void from_json(const json& j, ProgrameMemorie& p) {
     j.at("economy").get_to(p.economy);
     j.at("working").get_to(p.working);
@@ -112,6 +118,12 @@ void from_json(const json& j, ProgrameMemorie& p) {
     j.at("temperature").get_to(p.temperature);
     j.at("mode").get_to(p.mode);
     j.at("fanSpeed").get_to(p.fanSpeed);
+}
+
+// accesarea campurilor din JSON si salvarea in struct
+void from_json_rezervor(const json& j, Rezervor& r) {
+    j.at("quantity").get_to(r.quantity);
+    j.at("numberOfMonths").get_to(r.numberOfMonths);
 }
 
 // END TIPURI
@@ -169,6 +181,10 @@ private:
         Routes::Post(router, "/programe/alege/:value", Routes::bind(&SmartAirEndpoint::setProgram, this));
         Routes::Get(router, "/programe/memorie", Routes::bind(&SmartAirEndpoint::getProgram, this));
         // TODO Routes::Post(router, "/programe/add", Routes::bind(&SmartAirEndpoint::addProgram, this));
+
+        // Ruta pentru rezervorul de apa
+        // forma lui body din Post {"numberOfMonths":3,"quantity":10}
+        Routes::Post(router, "/rezervorApa", Routes::bind(&SmartAirEndpoint::setRezervor, this));
     }
 
     
@@ -306,6 +322,40 @@ private:
     }
 
     // END PROGRAME
+    ///////////////////////
+
+    // Endpoint to load the settings from a given preset
+    void setRezervor(const Rest::Request& request, Http::ResponseWriter response){
+        // You don't know what the parameter content that you receive is, but you should
+        // try to cast it to some data structure. Here, I cast the settingName to string.
+        string requestRezervor = request.body();
+        Rezervor rezervor;
+
+        json y = json::parse(requestRezervor);
+
+        // This is a guard that prevents editing the same value by two concurent threads. 
+        Guard guard(smartAirLock);
+
+        from_json_rezervor(y, rezervor);
+
+        // // Setting the microwave's setting to value
+        int setResponse = -1;
+        if(rezervor.quantity > 0 && rezervor.numberOfMonths > 0){
+            setResponse = 1;
+        }
+        
+        // Sending some confirmation or error response.
+        if (setResponse == 1) {
+            response.send(Http::Code::Ok, "S-a facut umplerea rezervorului cu " + to_string(rezervor.quantity) 
+                        + " litri. Urmatoarea schimbare se va face peste " + to_string(rezervor.numberOfMonths) + " luni.");
+        }
+        else {
+            response.send(Http::Code::Not_Found,"Rezervorul nu poate primi valori negative.");
+        }
+    }
+
+
+    // END REZERVOR APA
     ///////////////////////
 
     // Defining the class of the AC. It should model the entire configuration of the AC
