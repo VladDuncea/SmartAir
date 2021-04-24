@@ -104,6 +104,12 @@ struct Rezervor{
     int numberOfMonths;
 };
 
+// Tipuri senzori
+enum tipSenzor{
+    TEMPERATURA,
+    UMIDITATE
+};
+
 // Parsare JSON -> programMemorie si invers
 void to_json(json& j, const ProgrameMemorie& p) {
     j = json{{"economy", p.economy}, {"working", p.working}, {"swing", p.swing}, 
@@ -185,6 +191,9 @@ private:
         // Ruta pentru rezervorul de apa
         // forma lui body din Post {"numberOfMonths":3,"quantity":10}
         Routes::Post(router, "/rezervorApa", Routes::bind(&SmartAirEndpoint::setRezervor, this));
+      
+        // Rute pentru senzori
+        Routes::Get(router, "/senzor/temperatura/:value", Routes::bind(&SmartAirEndpoint::senzorTemperatura, this));
     }
 
     
@@ -321,6 +330,27 @@ private:
         }
     }
 
+    // Endpoint to load the settings from a given preset
+    void senzorTemperatura(const Rest::Request& request, Http::ResponseWriter response){
+        // You don't know what the parameter content that you receive is, but you should
+        // try to cast it to some data structure. Here, I cast the settingName to string.
+        double temperatura = request.param(":value").as<std::double_t>();
+
+        // This is a guard that prevents editing the same value by two concurent threads. 
+        Guard guard(smartAirLock);
+
+        // Setting the microwave's setting to value
+        int setResponse = smartAir.updateSenzor(tipSenzor::TEMPERATURA, temperatura);
+
+        // Sending some confirmation or error response.
+        if (setResponse != -1) {
+            response.send(Http::Code::Ok, "OK");
+        }
+        else {
+            response.send(Http::Code::Not_Found,"Eroare setare valoare");
+        }
+    }
+
     // END PROGRAME
     ///////////////////////
 
@@ -371,6 +401,9 @@ private:
         vector<ProgrameMemorie> programeMemorie;
         // Cale fisier programe
         const string locatiePrograme = "programe.txt";
+
+        // Valori camera
+        double temperaturaCamera, umiditateCamera;
 
     public:
 
@@ -667,6 +700,24 @@ private:
             }
 
             cout << "Am oprit threadul de update!";
+        }
+
+        // Senzori
+        int updateSenzor(tipSenzor tip, double valoare)
+        {
+            switch(tip)
+            {
+                case tipSenzor::TEMPERATURA:
+                    temperaturaCamera = valoare;
+                break;
+                case tipSenzor::UMIDITATE:
+                    umiditateCamera = valoare;
+                break;
+                default:
+                    return -1;
+            }
+
+            return 1;
         }
     };
 
