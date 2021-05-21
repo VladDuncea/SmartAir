@@ -105,6 +105,11 @@ enum tipSenzor{
     UMIDITATE
 };
 
+//matrice senzori
+struct MatriceSenzor{
+    float matrice[4][4];
+};
+
 // Parsare JSON -> programMemorie si invers
 void to_json(json& j, const ProgrameMemorie& p) {
     j = json{{"economy", p.economy}, {"working", p.working}, {"swing", p.swing}, 
@@ -119,6 +124,8 @@ void from_json(const json& j, ProgrameMemorie& p) {
     j.at("mode").get_to(p.mode);
     j.at("fanSpeed").get_to(p.fanSpeed);
 }
+
+
 
 // END TIPURI
 /////////////////
@@ -178,6 +185,9 @@ private:
 
         // Rute pentru senzori
         Routes::Get(router, "/senzor/temperatura/:value", Routes::bind(&SmartAirEndpoint::senzorTemperatura, this));
+        //post matrix
+        Routes::Post(router, "/matrice/:value", Routes::bind(&SmartAirEndpoint::setMatrice, this));
+
     }
 
     
@@ -193,6 +203,40 @@ private:
 
     /////////////////////
     // SETARI
+
+    void setMatrice(const Rest::Request& request, Http::ResponseWriter response){
+       // You don't know what the parameter content that you receive is, but you should
+        // try to cast it to some data structure. Here, I cast the settingName to string.
+
+        auto requestMatrice = request.param(":value").as<std::string>();
+        cout<<requestMatrice;
+        MatriceSenzor matriceSenzor ;
+
+        // This is a guard that prevents editing the same value by two concurent threads. 
+        Guard guard(smartAirLock);
+        double temperaturaMedie=0;
+        int i, j;
+        for (i = 0; i < 4; ++i) {
+            for (j = 0; j < 4; ++j) {
+            temperaturaMedie = temperaturaMedie + matriceSenzor.matrice[i][j];
+        }
+        }
+        temperaturaMedie = temperaturaMedie/16;
+        // // Setting the microwave's setting to value
+        int setResponse = -1;
+        if(temperaturaMedie > 10){
+            setResponse = 1;
+        }
+
+        // Sending some confirmation or error response.
+        if (setResponse == 1) {
+            response.send(Http::Code::Ok, "Temperatura medie este de" + to_string(temperaturaMedie));
+        }
+        else {
+            response.send(Http::Code::Not_Found,"Creste temperatura, camera este prea rece");
+        }
+
+    }
 
     // Endpoint to configure one of the AC's settings.
     void setSetting(const Rest::Request& request, Http::ResponseWriter response){
