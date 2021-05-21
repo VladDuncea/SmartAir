@@ -107,8 +107,12 @@ enum tipSenzor{
 
 //matrice senzori
 struct MatriceSenzor{
-    float matrice[4][4];
+    float matrice[16];
 };
+
+void from_json(const json& j, MatriceSenzor& s) {
+    j.at("matrice").get_to(s.matrice);
+}
 
 // Parsare JSON -> programMemorie si invers
 void to_json(json& j, const ProgrameMemorie& p) {
@@ -209,17 +213,16 @@ private:
         // try to cast it to some data structure. Here, I cast the settingName to string.
 
         auto requestMatrice = request.param(":value").as<std::string>();
-        cout<<requestMatrice;
-        MatriceSenzor matriceSenzor ;
+
+        json js = json::parse("{ \"matrice\": " + requestMatrice +" }");
+        MatriceSenzor matriceSenzor = js;
 
         // This is a guard that prevents editing the same value by two concurent threads. 
         Guard guard(smartAirLock);
         double temperaturaMedie=0;
         int i, j;
-        for (i = 0; i < 4; ++i) {
-            for (j = 0; j < 4; ++j) {
-            temperaturaMedie = temperaturaMedie + matriceSenzor.matrice[i][j];
-        }
+        for (i = 0; i < 16; ++i) {
+                temperaturaMedie = temperaturaMedie + matriceSenzor.matrice[i];
         }
         temperaturaMedie = temperaturaMedie/16;
         // // Setting the microwave's setting to value
@@ -230,7 +233,7 @@ private:
 
         // Sending some confirmation or error response.
         if (setResponse == 1) {
-            response.send(Http::Code::Ok, "Temperatura medie este de" + to_string(temperaturaMedie));
+            response.send(Http::Code::Ok, "Temperatura medie este de " + to_string(temperaturaMedie));
         }
         else {
             response.send(Http::Code::Not_Found,"Creste temperatura, camera este prea rece");
