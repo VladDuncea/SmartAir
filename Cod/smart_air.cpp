@@ -207,6 +207,7 @@ private:
         Routes::Get(router, "/senzor/temperatura/:value", Routes::bind(&SmartAirEndpoint::senzorTemperatura, this));
         //post matrix
         Routes::Post(router, "/matrice/:value", Routes::bind(&SmartAirEndpoint::setMatrice, this));
+        Routes::Get(router, "/matrice", Routes::bind(&SmartAirEndpoint::getMatrice, this));
 
     }
 
@@ -235,6 +236,10 @@ private:
 
         // This is a guard that prevents editing the same value by two concurent threads. 
         Guard guard(smartAirLock);
+
+        // Setare matrice in AC
+        smartAir.setMatriceTemp(matriceSenzor);
+
         double temperaturaMedie=0;
         int i, j;
         for (i = 0; i < 16; ++i) {
@@ -250,6 +255,29 @@ private:
         // Sending some confirmation or error response.
         if (setResponse == 1) {
             response.send(Http::Code::Ok, "Temperatura medie este de " + to_string(temperaturaMedie));
+        }
+        else {
+            response.send(Http::Code::Not_Found,"Creste temperatura, camera este prea rece");
+        }
+
+    }
+
+    void getMatrice(const Rest::Request& request, Http::ResponseWriter response){
+        // You don't know what the parameter content that you receive is, but you should
+        // try to cast it to some data structure. Here, I cast the settingName to string.
+
+        // This is a guard that prevents editing the same value by two concurent threads. 
+        Guard guard(smartAirLock);
+
+        MatriceSenzor matriceSenzor = smartAir.getMatriceSenzor();
+        json js;
+        js["matrice"] = matriceSenzor.matrice;
+
+        int setResponse = 1;
+
+        // Sending some confirmation or error response.
+        if (setResponse == 1) {
+            response.send(Http::Code::Ok, js.dump());
         }
         else {
             response.send(Http::Code::Not_Found,"Creste temperatura, camera este prea rece");
@@ -451,6 +479,9 @@ private:
 
         // Valori camera
         double temperaturaCamera, umiditateCamera;
+
+        // Matrice temp
+        MatriceSenzor matriceSenzor;
 
     public:
 
@@ -720,6 +751,16 @@ private:
 
             return "";
         }
+
+        void setMatriceTemp(MatriceSenzor m)
+        {
+            matriceSenzor = m;
+        }
+
+        MatriceSenzor getMatriceSenzor()
+        {
+            return matriceSenzor;
+        }
     
         string getRunngingConfig()
         {
@@ -744,6 +785,7 @@ private:
                 this_thread::sleep_for (chrono::seconds(1));
 
                 // TODO aici vor veni toate interactiunile periodice
+
             }
 
             cout << "Am oprit threadul de update!";

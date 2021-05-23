@@ -3,7 +3,6 @@ cd paho.mqtt.cpp
 
 sudo apt-get install libssl-dev
 
-// casually 100 de linii pe aici
 
 cmake -Bbuild -H. -DPAHO_BUILD_STATIC=ON \
     -DPAHO_BUILD_DOCUMENTATION=TRUE -DPAHO_BUILD_SAMPLES=TRUE
