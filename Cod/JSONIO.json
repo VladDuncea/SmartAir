@@ -1,0 +1,125 @@
+{
+    "device-name": "SmartAir app",
+    "device-type": "A/C",
+    "buffers-count": 2,
+    "input-buffers":{
+        "1":{
+            "token-delimitators": "/",
+            "protocol": "HTTP",
+            "prefix": "curl -XPOST 'http://127.0.0.1:9080/settings'",
+            "buffer-tokens":[
+            {
+                "name":"AC option parameter key",
+                "description": "Parameter key for the setting chosen",
+                "token-type":"string",
+                "byte-size":10,
+                "regex-rule": "[a-zA-Z]*", // Correct inputs will be: [economy, onoff, timer, swing, mode, fanSpeed]
+                "optional": false
+            },
+            {
+                "name":"AC option parameter value",
+                "description": "Parameter value for the setting chosen",
+                "token-type":"string",
+                "byte-size":10,
+                "regex-rule": "[a-zA-Z]*", // Correct inputs will be: [true, false, auto, low, medium, high, cool, dry, heat]
+                "optional": false
+            }
+            ]
+        },
+        "2":{
+            "token-delimitators": "/",
+            "protocol": "HTTP",
+            "prefix": "curl -XPOST 'http://127.0.0.1:9080/settings'",
+            "buffer-tokens":[
+            {
+                "name":"AC option parameter key",
+                "description": "Parameter key for the setting chosen",
+                "token-type":"string",
+                "byte-size":12,
+                "regex-rule": "[a-zA-Z]*", // Correct inputs will be: [temperature]
+                "optional": false
+            },
+            {
+                "name":"AC option parameter value",
+                "description": "Parameter value for the setting chosen",
+                "token-type": "string",
+                "byte-size":4,
+                "regex-rule": "^1[5-9]$|^2[0-9]$|^30$", // Correct inputs will be numbers between 15 - 30
+                "optional": false
+            }
+            ]
+        },
+        "3":{
+            "token-delimitators": "/",
+            "protocol": "HTTP",
+            "prefix": "curl -XPOST 'http://127.0.0.1:9080/programe/alege'",
+            "buffer-tokens":[
+            {
+                "name":"AC option parameter value",
+                "description": "Parameter value for the setting chosen",
+                "token-type": "string",
+                "byte-size":4,
+                "regex-rule": "^[0-4]$", // Correct inputs will be numbers between 0 - 4
+                "optional": false
+            }
+            ]
+        },
+        "4":{
+            "token-delimitators": "/",
+            "protocol": "HTTP",
+            "prefix": "curl -XPOST 'http://127.0.0.1:9080/rezervorApa/'",
+            "buffer-tokens":[
+            {
+                "name":"AC refill parameters",
+                "description": "JSON object with refill data",
+                "token-type": "JSON",
+                "byte-size":100,
+                "regex-rule": "", // Not specified how to handle JSON OBJ
+                "optional": false
+            }
+            ]
+        },
+        "5":{
+            "token-delimitators": "",
+            "protocol": "HTTP",
+            "prefix": "curl -XPOST 'http://127.0.0.1:9080/matrice/'",
+            "buffer-tokens":[
+            {
+                "name":"AC temperature matrix",
+                "description": "AC temperature matrix",
+                "token-type": "string",
+                "byte-size":100,
+                "regex-rule": "^\\[(([0-9]|[1-3][0-9]),){15}([0-9]|[1-3][0-9])\\]$", // Array of 16 numbers between 0-39
+                "optional": false
+            }
+            ]
+        }
+    },
+    "output-buffers":{
+        "1":{
+            "token-delimitators": "",
+            "protocol": "HTTP",
+            "prefix": "curl -XGET 'http://127.0.0.1:8080/'",
+            "buffer-tokens":[
+            {
+                "name":"Get AC data",
+                "description":"",
+                "token-type":"string", 
+                "byte-size":10, 
+                "regex-rule": "[a-zA-Z]*", // Correct inputs will be: [ready, auth, settings, matrice, programe]
+                "optional": false
+            },
+            {
+                "name":"AC data options",
+                "description": "Parameters for the chosen data type",
+                "token-type":"string",
+                "byte-size":10,
+                "regex-rule": "[a-zA-Z]*", // Correct inputs will be: [getAll, economy, onoff, timer, swing, mode, fanSpeed, memorie]
+                "optional": true
+            }
+            ]
+        }
+    }
+}
+
+
